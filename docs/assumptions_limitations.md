@@ -40,6 +40,31 @@ assumed, why, and what breaks if it's wrong.
   ships no athlete-attributes/codebook file the GitHub mirror dropped - the sandbox
   can't reach Dataverse.)
 
+## Feature-engineering decisions (02_features)
+
+- **Daily series reconstructed from overlapping windows, validated twice.** The
+  day-approach table's 7-day windows overlap, so the per-athlete daily series is
+  recoverable exactly: zero disagreement across all overlapping copies, and rolling
+  `km_7d` re-derives every source row's own slot sum to 1e-13. Not an estimate.
+- **Negative `day` values are real history, not padding.** First labeled rows' windows
+  reach before global Date 0 and carry genuine training data (all 206 such records are
+  nonzero). Kept as observed days; labels only attach at Date >= 0. (A first draft
+  dropped them as padding; the anchor check caught it.)
+- **Unlogged gap days stay NaN; windows are coverage-gated, never zero-filled.**
+  Zero-filling would fabricate rest. Gates: 7d window needs >=5 logged days, 14d >=10,
+  28d >=20, else feature is NaN. Thresholds are judgment calls; sensitivity is cheap
+  to test in 03. Cost: ~19-20% of rows lose ACWR, ~14-15% lose km_28d.
+- **Coupled ACWR** (`km_7d / (km_28d/4)`, acute week inside chronic) per Hulin et al.
+  2016 / Gabbett 2016, adopted as domain guidance with critiques noted (Impellizzeri
+  et al. 2020; EWMA variant Williams et al. 2017). Treated as a candidate feature,
+  not an injury law.
+- **Both framings produced:** same-day (`__same`, window ends at t, paper-comparable)
+  and prospective (`__pros`, window ends at t-1, what a triage tool would have).
+  Which one 03 leads with is an open decision for Austin.
+- Processed tables live in `data/processed/` and are **gitignored**: athlete-day level
+  tables could reconstruct an individual's log, which data/README.md forbids
+  committing.
+
 ## Modeling assumptions
 
 - (add as made)
