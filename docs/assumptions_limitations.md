@@ -26,11 +26,13 @@ assumed, why, and what breaks if it's wrong.
 
 ## Open decisions (surfaced in 01_eda, for Austin to settle)
 
-- **Injury-day slice in the window.** The unsuffixed (most-recent-day) block is elevated
-  on injury rows, i.e. it appears to include the injury day's own load. Keeping it
-  matches the paper's same-day framing (good for benchmark comparison); dropping it is
-  the honest choice for a *prospective* triage tool. Decide in 02/03 and label the task
-  accordingly.
+- **Injury-day slice in the window.** Block ordering was proven in 01_eda (2.5M
+  zero-mismatch slide checks): **`.6` is the most recent day - the injury day on
+  positive rows - and the unsuffixed block is the oldest (t-6).** An earlier draft had
+  this backwards from a univariate load comparison; the slide check settled it.
+  Keeping the `.6` slice matches the paper's same-day framing (good for benchmark
+  comparison); dropping it is the honest choice for a *prospective* triage tool.
+  Decide in 02/03 and label the task accordingly.
 - ~~**Sex subgroup source.**~~ *Settled:* no sex label ships with the data and we will
   not infer it; sex subgroup replaced by tenure / volume-tier / per-athlete-spread
   checks and recorded as a limitation. See Known limitations above and
