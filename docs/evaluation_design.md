@@ -31,9 +31,17 @@ near-duplicates and leak.
 
 ## Subgroup checks
 
-Performance split by sex (only 27 of 74 athletes are women - small-n caveat gets
-stated, not hidden) and by athlete tenure. If the model degrades for a subgroup,
-that goes in the README, not under the rug.
+Sex-based subgroup analysis was planned but is not supportable: the cohort is
+described as 27 women / 47 men in the source paper, but the released data does not map
+sex to athlete IDs, and we do not attempt to infer it. Recorded as a limitation rather
+than silently dropped. Feasible subgroup checks instead: (a) athlete tenure -
+short-history vs long-history athletes; (b) training-volume tier - high-km vs low-km
+athletes; (c) per-athlete performance spread - distribution of per-athlete metrics, to
+detect a model that only works for a subset of runners while looking fine on average.
+
+With 74 athletes, an average metric can hide a model that is useless for a third of
+them; check (c) is the one an operational program would actually care about. If the
+model degrades for a subgroup, that goes in the README, not under the rug.
 
 ## Assumptions log
 

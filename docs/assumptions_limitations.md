@@ -31,11 +31,12 @@ assumed, why, and what breaks if it's wrong.
   matches the paper's same-day framing (good for benchmark comparison); dropping it is
   the honest choice for a *prospective* triage tool. Decide in 02/03 and label the task
   accordingly.
-- **Sex subgroup source.** Neither table carries a sex/age column (only masked
-  `Athlete ID`), yet the evaluation plan calls for a sex subgroup check. Either join an
-  ID->sex mapping from the source paper's replication package, or drop the sex subgroup
-  (keeping tenure/exposure, which *is* derivable) and state why. `evaluation_design.md`
-  needs a footnote once decided.
+- ~~**Sex subgroup source.**~~ *Settled:* no sex label ships with the data and we will
+  not infer it; sex subgroup replaced by tenure / volume-tier / per-athlete-spread
+  checks and recorded as a limitation. See Known limitations above and
+  `evaluation_design.md`. (Open confirmation for Austin: verify the Dataverse original
+  ships no athlete-attributes/codebook file the GitHub mirror dropped - the sandbox
+  can't reach Dataverse.)
 
 ## Modeling assumptions
 
@@ -45,7 +46,11 @@ assumed, why, and what breaks if it's wrong.
 
 - 74 athletes from one elite Dutch team: findings may not transfer to other
   populations, training cultures, or recreational runners
-- Only 27 women in the sample - subgroup estimates for women are noisy
+- Sex subgroup analysis is not supportable: the cohort is described as 27 women / 47
+  men, but the released data maps no sex label to athlete IDs and we do not infer it
+  (inferring sex from training volume would be methodologically wrong and unethical).
+  Planned, found unsupportable, refused to proxy, documented - substituted tenure,
+  volume-tier, and per-athlete-spread subgroups (see evaluation_design.md)
 - Elite middle/long-distance running only; no strength/power athletes
 - Observational data: the model finds risk associations, not causes; it cannot say
   "reduce load and injury risk drops"
