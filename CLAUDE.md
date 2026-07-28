@@ -47,7 +47,10 @@ Defined in `docs/evaluation_design.md`, written BEFORE modeling on purpose:
 4. **Alert-budget view** - at a realistic flags-per-week threshold, what are
    precision and recall? This is the operational framing an H2F-style program cares
    about
-5. Subgroup checks (sex, tenure) with small-n caveats stated openly
+5. Subgroup checks with small-n caveats stated openly. Sex subgroup was found
+   unsupportable (no per-athlete sex label ships with the data; we do not infer it)
+   and was replaced with tenure, volume-tier, and per-athlete-spread checks - see
+   docs/evaluation_design.md
 6. Two split strategies, reported separately: time-aware (train early years / test
    late) and athlete-grouped (no athlete in both sides). Plain random row splits are
    forbidden - leakage.
@@ -95,10 +98,15 @@ markdown explains WHY, not just what. Honest about what didn't work - the README
 
 - [x] Scaffold committed (git initialized, branch `main`, Austin's identity)
 - [x] Data in `data/raw/` (gitignored), verified: 74 athletes, ~1.36% positive rate
-- [ ] Create GitHub repo `runner-injury-risk` (public) and push - Claude Code can do
-      this via `gh repo create` once `gh auth status` shows Austin logged in
-- [ ] 01_eda: answer the rest-vs-unlogged question first
-- [ ] 02-04 per method plan above
+- [x] GitHub repo created and pushed: https://github.com/auswallace/runner-injury-risk
+- [x] 01_eda: rest-vs-unlogged answered (zero-km = logged rest; gaps between rows are
+      the true unlogged periods). Window ordering corrected and proven: .6 = most
+      recent day / injury day, unsuffixed = t-6
+- [x] 02_features: daily series reconstructed exactly from overlapping windows;
+      16 features x 2 framings (same-day / prospective) in data/processed/
+- [ ] 03_model, 04_evaluation per method plan above. Open decisions for Austin:
+      headline framing (prospective vs same-day), ACWR form + coverage-gate
+      sensitivity
 - [ ] Dashboard layer
 - [ ] Then: Projects section + GitHub link on the resume (coordinate via the wiki,
       see `wiki/resume/JD — LMI — AI ML Engineer.md` Application Status section)

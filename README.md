@@ -46,4 +46,11 @@ docs/            evaluation design, assumptions & limitations
 
 ## Status
 
-Scaffold stage. EDA in progress.
+- 01_eda done: 1.36% positive rate (583/42,766 rows), Date confirmed as a shared
+  calendar index, missingness resolved (zero-km days are logged rest; true gaps live
+  between rows), window ordering proven structurally (2.5M zero-mismatch checks)
+- 02_features done: per-athlete daily series reconstructed exactly from the
+  overlapping windows, 16 features in two framings (same-day and prospective),
+  unlogged gaps coverage-gated rather than zero-filled
+- 03_model next: class-weighted logistic baseline, then XGBoost
+- Findings and every assumption logged in `docs/assumptions_limitations.md`
