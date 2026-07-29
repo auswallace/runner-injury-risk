@@ -38,7 +38,34 @@ assumed, why, and what breaks if it's wrong.
   ships no athlete-attributes/codebook file the GitHub mirror dropped - the sandbox
   can't reach Dataverse.)
 
-## Dataset-construction artifact (discovered hunting 03 v1's 0.987 AUC)
+## Source-paper alignment (read after 03 v2; corrected our window assumption)
+
+- **All 7 slots are pre-event days.** Lövdal et al. 2021 Methods: the feature window
+  covers the 7 days *before* the event ("the day before the event is seen as day 0 ...
+  7 days before the event is day 6") and the target is whether the *next* training
+  session results in injury. Combined with 01's proof that `.6` is the newest slot,
+  `.6` is **the day before the injury, not the injury day**. v2 had dropped `.6` as a
+  leakage precaution based on our own wrong assumption; v3 restores it, which also
+  makes the window paper-identical. The 6-slot variant survives as a lead-time
+  sensitivity check (2 days of warning), a different question from leakage.
+- **Benchmark numbers (verified, not guessed):** bagged XGBoost, day approach test
+  AUC **0.724** (SD 0.01), week approach 0.678; day sensitivity 58.4%, specificity
+  74.1% at threshold 0.448. Their test set = the 10 most recently joined athletes, so
+  their number is closest to our athlete-grouped split. They report ROC only - no
+  precision-recall, no alert-budget view. At this dataset's 1.4% prevalence their
+  operating point implies roughly 3% precision (~32 false alarms per true flag),
+  which is exactly the gap this project's evaluation design fills.
+- **Per-athlete normalization adopted, deliberately deviating from the paper.** They
+  z-normalize per athlete using that athlete's healthy events - including events
+  *after* the row being normalized, which is mildly transductive. We normalize each
+  row using only that athlete's strictly earlier healthy rows (expanding window,
+  shifted, >= 20 prior rows required), so no row sees its own future. Cost: ~5-15% of
+  rows unnormalizable early in an athlete's history. Standing gate: the NaN symmetry
+  audit in 02 (worst injury-vs-healthy NaN gap 0.075, and in the healthy-missing-more
+  direction; v1's poisoned features had gaps of 0.81-0.96).
+
+## Dataset-construction artifact (discovered hunting 03 v1's 0.987 AUC, later
+## confirmed word-for-word in the paper's Methods)
 
 - **The publishers removed all rows for >= 22 days before every injury** (every
   injury row's previous same-athlete row is >= 22 days back, median 22; 98.9% of
@@ -102,14 +129,24 @@ assumed, why, and what breaks if it's wrong.
   search would mostly fit validation noise. Logistic C in {0.01, 0.1, 1}; XGBoost
   depth {2,3,4} x lr {0.05, 0.1}.
 - **Pre-registered selection rule (03, stated before results):** winner = highest
-  validation AP; ties within 0.005 go to the simpler model. Outcome: logistic
-  C=0.01 won BOTH splits (time-aware val AP 0.021 vs chance 0.016, AUC 0.60;
-  grouped mean AP 0.029 vs chance 0.014). XGBoost lost everywhere - complexity did
-  not earn its keep on 6-day windows.
-- **Honest signal statement:** with leak-free prospective features the signal is
-  modest (~1.4x chance AP). This is consistent with the sports-science reality that
-  short-window injury prediction is hard; the inflated numbers common in this
-  space tend to involve exactly the leaks this project caught and removed.
+  validation AP; ties within 0.005 go to the simpler model. Outcome (v3): logistic
+  C=0.01 won BOTH splits. Athlete-grouped CV mean AP **0.064** vs chance 0.014
+  (4.5x), AUC **0.690** against the paper's 0.724 on their closest-analogue split;
+  time-aware val AP 0.032 vs chance 0.016, AUC 0.634. XGBoost lost every comparison -
+  complexity did not earn its keep.
+- **Feature-set evidence for the normalization decision (03 v3):** grouped CV AUC
+  w7 raw 0.658 -> w7 raw+z **0.686**; grouped AP 0.029 -> **0.062**, i.e. per-athlete
+  normalization roughly doubles average precision. Consistent with the paper's design
+  rationale: absolute km means different things to a 43-row athlete and a 1,791-row
+  athlete.
+- **Imbalance strategies (03 v3, logistic on w7 raw+z):** class weights (AP 0.032)
+  beat unweighted (0.027) and 10:1 undersampling (0.029) on the time-aware split.
+  Ranking gains are modest; the real reason to weight is calibration behaviour, which
+  04 tests directly.
+- **Honest signal statement:** leak-free, the model is ~4.5x chance AP and within
+  0.035 AUC of the published benchmark - real but modest signal. Short-window injury
+  prediction is genuinely hard; the spectacular numbers common in this space tend to
+  come from exactly the leaks this project found and removed.
 
 ## Known limitations (stated up front)
 

@@ -2,12 +2,27 @@
 
 Written BEFORE modeling, so the evaluation can't quietly bend to flatter the model.
 
-## Benchmark
+## Benchmark (verified from the paper, 2026-07-29)
 
-The source paper (Lovdal et al. 2021) reports AUC via bagged XGBoost on this exact
-dataset (day approach and week approach variants). That published number is the
-benchmark. Matching it with honest validation is success; beating it is a bonus;
-understanding *why* results differ is the real deliverable.
+Lövdal et al. 2021, bagged XGBoost (9 models on balanced 2048/2048 resamples, Platt
+calibrated):
+
+| approach | test AUC | validation AUC | sensitivity | specificity |
+|---|---|---|---|---|
+| day  | **0.724** (SD 0.01) | 0.729 | 0.584 | 0.741 |
+| week | 0.678 (SD 0.01) | 0.783 | 0.504 | 0.746 |
+
+Their test set is the data of the 10 most recently joined athletes, so their number
+is closest to our **athlete-grouped** split, not our time-aware one. Matching it with
+honest validation is success; beating it is a bonus; understanding *why* results
+differ is the real deliverable.
+
+**What the benchmark does not report, and we do.** The paper reports ROC only. At
+this dataset's ~1.4% prevalence, its published day-approach operating point (58.4%
+sensitivity, 74.1% specificity) implies roughly 3% precision - about 32 false alarms
+per true flag. That is not a criticism of their modeling; it is the number an
+operational program needs and ROC cannot show. Precision-recall, calibration and the
+alert-budget view below exist to make it visible.
 
 ## Split strategy (both, reported separately)
 
