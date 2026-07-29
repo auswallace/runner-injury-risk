@@ -4,6 +4,48 @@ Running narrative of what happened and why, for picking work back up cold. CLAUD
 has the current state; this file has the reasoning trail, including the wrong turns.
 Newest session first.
 
+## Session 3 (2026-07-29): 04_evaluation - the one-shot test run
+
+The locked test sets were touched for the first and only time. Four open decisions
+were surfaced with validation-side evidence and settled by Austin BEFORE any test
+contact (recorded in assumptions_limitations.md under "Evaluation decisions"):
+
+1. TA final model fit on train only, validation spent once on the calibrator (the
+   train+val refit was rejected: its calibrator would map a different model's score
+   distribution). Grouped: fit on all dev, calibrator on cross-fitted OOF preds.
+2. Platt over isotonic, both splits. Cross-fitted val Brier was a near-tie (TA
+   0.01527 vs 0.01532; GR 0.01391 vs 0.01379); Platt has 2 params at 132 calibration
+   positives and matches the paper's own choice.
+3. Alert budgets 1/2/3/5/10 flags/week, thresholds frozen on validation.
+4. Median subgroup splits, dev-side cutoffs, evaluated on the grouped test.
+
+### Results (final - these numbers do not get revisited)
+
+- Headline: **test AP 0.030 both splits** (1.7x chance TA, 2.6x GR); **AUC 0.629 TA
+  / 0.619 GR** vs paper 0.724 and our grouped CV 0.690.
+- The grouped CV -> test drop is athlete heterogeneity, not a bug: per-athlete AUC
+  spans 0.27-0.83, 2 of 15 evaluable test athletes below 0.5. Check (c) of the
+  evaluation design caught exactly what it was built to catch.
+- Calibration: Platt repairs gross miscalibration (Brier 0.245 -> 0.0173) but ties
+  the base-rate reference. Ranking has value; sharpness does not. Bands, not
+  percentages, in the dashboard.
+- Alert budget: 2.9-4.3% precision at 1-5 flags/week, recall 2-18% - the paper's
+  implied ~3% precision made explicit. Frozen thresholds under-flagged the grouped
+  test (lower-prevalence pool): budgets drift across populations.
+- Subgroups: better for short-tenure / low-volume athletes (AUC 0.66-0.67 vs
+  0.60-0.62; small bins, direction not precision).
+- w6 lead-time check: two days of warning costs ~nothing (GR AP 0.032 vs 0.030).
+
+"When NOT to trust the score" in assumptions_limitations.md is now filled with the
+five concrete blind spots above. `data/processed/evaluation_results.json` carries
+every table for the dashboard layer.
+
+### Next session starts here
+
+Decision-support dashboard (Austin's differentiator): weekly flagged-athletes view
+reading evaluation_results.json + per-row scores; must carry the calibration caveat
+and per-athlete-spread caveat on its face. Then resume/README wiring per CLAUDE.md.
+
 ## Session 2 (2026-07-28 / 29): 01 -> 03, three corrections
 
 Started from the committed scaffold, ended with a validated model within 0.035 AUC of

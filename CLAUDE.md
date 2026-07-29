@@ -129,16 +129,21 @@ markdown explains WHY, not just what. Honest about what didn't work - the README
       XGBoost lost every comparison. Splits: time-aware T1/T2 at Date quantiles
       .6/.8 with 7-day purge; grouped = injury-sorted every-4th athlete to test.
       Chosen configs + benchmark in data/processed/model_selection.json
-- [ ] **04_evaluation - NEXT.** Refit winners on dev, evaluate ONCE on the locked
-      test sets (never touched so far): PR/AP headline + ROC for paper comparison,
-      calibration curve + Brier (raw logistic probs from class-weighted training
-      will be miscalibrated - recalibrate on validation, e.g. Platt/isotonic, never
-      on test), alert-budget table (flags/week vs precision/recall), subgroups
-      (tenure, volume tier, per-athlete spread; sex is documented-unsupportable),
-      and the w6 lead-time sensitivity check. Expect honest-modest numbers; the
-      paper's implied ~3% precision at its operating point is the comparison that
-      matters operationally
-- [ ] Dashboard layer (decision-support view - Austin's differentiator, do not skip)
+- [x] 04_evaluation: one-shot test run DONE (numbers final, do not revisit). Test
+      AP 0.030 both splits (1.7x chance TA / 2.6x GR); AUC 0.629 TA / 0.619 GR vs
+      paper 0.724. Grouped CV->test drop (0.690->0.619) = per-athlete heterogeneity
+      (per-athlete AUC 0.27-0.83, 2 of 15 below 0.5). Platt-calibrated Brier ties
+      base rate: score is a ranking, not sharp probabilities - bands, not
+      percentages. Alert budget: 2.9-4.3% precision at 1-5 flags/wk, recall 2-18%.
+      w6 lead-time is ~free. Four pre-test decisions (train-only refit + val
+      calibrator, Platt, frozen val thresholds, median subgroups) locked by Austin,
+      logged in assumptions_limitations.md; results in
+      data/processed/evaluation_results.json; blind spots filled into "When NOT to
+      trust the score"
+- [ ] **Dashboard layer - NEXT** (decision-support view - Austin's differentiator,
+      do not skip). Reads evaluation_results.json + per-row scores; must carry the
+      calibration caveat (bands not percentages) and per-athlete-spread caveat on
+      its face
 - [ ] Then: Projects section + GitHub link on the resume (coordinate via the wiki,
       see `wiki/resume/JD — LMI — AI ML Engineer.md` Application Status section)
 
