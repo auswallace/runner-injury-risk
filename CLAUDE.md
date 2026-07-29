@@ -34,8 +34,24 @@ DOI 10.34894/uwu9pv; data mirror pulled from GitHub). Two framings:
 - Features: km by intensity zone, sessions, perceived exertion, strength training,
   rest days, etc.
 
-The companion paper's reported results (bagged XGBoost, ROC analysis) are the
-**public benchmark** - look them up in the paper before evaluation, don't guess them.
+**Structure of a row (proven in 01, alignment confirmed against the paper):** each
+row is one athlete-day carrying a 7-day window of 10 metrics. Slot `.6` is the
+**newest** slot and the unsuffixed block the oldest. All 7 slots are days *before*
+the event - the paper's target is whether the *next* training session brings injury -
+so `.6` is the day before the injury, NOT the injury day.
+
+**Dataset artifact that constrains all feature design (found in 03, then confirmed in
+the paper's Methods):** healthy events required the athlete to be fully fit 3 weeks
+either side, so every injury row's previous same-athlete row is >= 22 days back while
+98.9% of healthy rows have one 1 day back. Any feature window reaching past a row's
+own 7 days is empty for injury rows only, and its missingness encodes the label.
+**Chronic load, ACWR, 14-day rest and week-over-week change are unbuildable here** -
+this was diagnosed by killing a 0.987-AUC model. Do not reintroduce them.
+
+**Benchmark (verified 2026-07-29, no longer guess-forbidden - it is in
+docs/evaluation_design.md):** bagged XGBoost day approach test AUC 0.724 (SD 0.01),
+sens 0.584 / spec 0.741; week approach 0.678. Their test set is the 10 most recently
+joined athletes, so it maps to our athlete-grouped split. They report ROC only.
 
 ## What we are measuring (decided - do not silently change)
 
@@ -60,13 +76,13 @@ Defined in `docs/evaluation_design.md`, written BEFORE modeling on purpose:
 1. `01_eda` - class balance, missingness (first open question: are missing days
    "rest" or "unlogged"? this decision shapes every feature), athlete heterogeneity.
    Every data quality finding goes into `docs/assumptions_limitations.md`.
-2. `02_features` - acute (7d) vs chronic (28d) load + ratio, intensity distribution,
-   recovery patterns, week-over-week change. Backward-looking windows only, computed
-   per athlete. Cite sports-science motivation (acute:chronic workload ratio) as
-   adopted domain guidance, not invention.
+2. `02_features` - ~~acute (7d) vs chronic (28d) load + ratio~~ SUPERSEDED: the
+   chronic side of the plan died on the dataset artifact above. What shipped:
+   within-window features on the 7 pre-event days + leak-free per-athlete
+   normalization (the paper's key trick, minus its transductive shortcut).
 3. `03_model` - regularized logistic regression with class weights FIRST (baseline),
    then XGBoost. Compare imbalance strategies (class weights vs resampling).
-   Complexity must earn its keep.
+   Complexity must earn its keep. DONE - it didn't: logistic won everywhere.
 4. `04_evaluation` - implement evaluation_design.md exactly.
 5. Decision-support layer - weekly flagged-athletes view (top features per flag,
    confidence, "when not to trust this" panel). Tableau Public or self-contained
@@ -99,15 +115,30 @@ markdown explains WHY, not just what. Honest about what didn't work - the README
 - [x] Scaffold committed (git initialized, branch `main`, Austin's identity)
 - [x] Data in `data/raw/` (gitignored), verified: 74 athletes, ~1.36% positive rate
 - [x] GitHub repo created and pushed: https://github.com/auswallace/runner-injury-risk
-- [x] 01_eda: rest-vs-unlogged answered (zero-km = logged rest; gaps between rows are
-      the true unlogged periods). Window ordering corrected and proven: .6 = most
-      recent day / injury day, unsuffixed = t-6
-- [x] 02_features: daily series reconstructed exactly from overlapping windows;
-      16 features x 2 framings (same-day / prospective) in data/processed/
-- [ ] 03_model, 04_evaluation per method plan above. Open decisions for Austin:
-      headline framing (prospective vs same-day), ACWR form + coverage-gate
-      sensitivity
-- [ ] Dashboard layer
+- [x] 01_eda: rest-vs-unlogged answered (zero-km = logged rest; gaps between rows
+      are the true unlogged periods); Date is a shared calendar index; slot ordering
+      proven structurally (.6 = newest slot = day before injury)
+- [x] 02_features (v3): 12 features x 2 windows (`__w7` = paper-identical 7 slots,
+      `__w6` = 2-day-lead sensitivity check) + per-athlete z-normalization (`__z`),
+      leak-free variant: each row scored against that athlete's strictly EARLIER
+      healthy rows only, >= 20 required. NaN symmetry audit is a standing gate on
+      every new feature family (worst gap 0.075 vs 0.81-0.96 on v1's poisoned set)
+- [x] 03_model (v3): winner = logistic C=0.01 on w7 raw+z, both splits, by the
+      pre-registered rule (max val AP, ties to simpler). Grouped CV AUC 0.690 /
+      AP 0.064 (chance 0.014); time-aware AUC 0.634 / AP 0.032 (chance 0.016).
+      XGBoost lost every comparison. Splits: time-aware T1/T2 at Date quantiles
+      .6/.8 with 7-day purge; grouped = injury-sorted every-4th athlete to test.
+      Chosen configs + benchmark in data/processed/model_selection.json
+- [ ] **04_evaluation - NEXT.** Refit winners on dev, evaluate ONCE on the locked
+      test sets (never touched so far): PR/AP headline + ROC for paper comparison,
+      calibration curve + Brier (raw logistic probs from class-weighted training
+      will be miscalibrated - recalibrate on validation, e.g. Platt/isotonic, never
+      on test), alert-budget table (flags/week vs precision/recall), subgroups
+      (tenure, volume tier, per-athlete spread; sex is documented-unsupportable),
+      and the w6 lead-time sensitivity check. Expect honest-modest numbers; the
+      paper's implied ~3% precision at its operating point is the comparison that
+      matters operationally
+- [ ] Dashboard layer (decision-support view - Austin's differentiator, do not skip)
 - [ ] Then: Projects section + GitHub link on the resume (coordinate via the wiki,
       see `wiki/resume/JD — LMI — AI ML Engineer.md` Application Status section)
 
