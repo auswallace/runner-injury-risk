@@ -49,8 +49,15 @@ docs/            evaluation design, assumptions & limitations
 - 01_eda done: 1.36% positive rate (583/42,766 rows), Date confirmed as a shared
   calendar index, missingness resolved (zero-km days are logged rest; true gaps live
   between rows), window ordering proven structurally (2.5M zero-mismatch checks)
-- 02_features done: per-athlete daily series reconstructed exactly from the
-  overlapping windows, 16 features in two framings (same-day and prospective),
-  unlogged gaps coverage-gated rather than zero-filled
-- 03_model next: class-weighted logistic baseline, then XGBoost
+- 02_features + 03_model done, including the project's best story so far: a first
+  feature set with 28-day chronic load / ACWR hit **validation AUC 0.987 - and was
+  killed as a leak.** The dataset's publishers removed all rows for >= 22 days
+  before each injury, so any window longer than the row's own 7 days encodes the
+  label through its own missingness (one missing-indicator flag carried 93% of
+  XGBoost's gain). Chronic load and ACWR are unbuildable without artifact on this
+  dataset; features were rebuilt symmetric (prospective = days t-1..t-6 only)
+- Honest leak-free results: logistic regression beats XGBoost on both split
+  designs; prospective signal is modest (time-aware val AP 0.021 vs chance 0.016,
+  AUC 0.60). Complexity did not earn its keep
+- 04_evaluation next: full pre-registered battery on the locked test sets
 - Findings and every assumption logged in `docs/assumptions_limitations.md`

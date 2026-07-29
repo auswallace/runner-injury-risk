@@ -26,13 +26,11 @@ assumed, why, and what breaks if it's wrong.
 
 ## Open decisions (surfaced in 01_eda, for Austin to settle)
 
-- **Injury-day slice in the window.** Block ordering was proven in 01_eda (2.5M
-  zero-mismatch slide checks): **`.6` is the most recent day - the injury day on
-  positive rows - and the unsuffixed block is the oldest (t-6).** An earlier draft had
-  this backwards from a univariate load comparison; the slide check settled it.
-  Keeping the `.6` slice matches the paper's same-day framing (good for benchmark
-  comparison); dropping it is the honest choice for a *prospective* triage tool.
-  Decide in 02/03 and label the task accordingly.
+- ~~**Injury-day slice in the window.**~~ *Settled by Austin before 03:* prospective
+  framing (windows end at t-1) leads everywhere; the same-day framing (includes the
+  `.6` injury-day slice) is run once in 04, clearly labeled, solely for comparison
+  against the paper's benchmark. (Background, proven in 01: `.6` = most recent day =
+  injury day; unsuffixed = t-6.)
 - ~~**Sex subgroup source.**~~ *Settled:* no sex label ships with the data and we will
   not infer it; sex subgroup replaced by tenure / volume-tier / per-athlete-spread
   checks and recorded as a limitation. See Known limitations above and
@@ -40,7 +38,23 @@ assumed, why, and what breaks if it's wrong.
   ships no athlete-attributes/codebook file the GitHub mirror dropped - the sandbox
   can't reach Dataverse.)
 
-## Feature-engineering decisions (02_features)
+## Dataset-construction artifact (discovered hunting 03 v1's 0.987 AUC)
+
+- **The publishers removed all rows for >= 22 days before every injury** (every
+  injury row's previous same-athlete row is >= 22 days back, median 22; 98.9% of
+  healthy rows have one 1 day back). Consequence: any feature window reaching past
+  the row's own 7 days is systematically empty for positives only, and EVERY
+  handling of that emptiness (NaN flags, imputation, zero-fill, row-dropping - the
+  last would delete all 583 positives) encodes the label. v1's long-window features
+  (km_28d, acwr, rest_days_14d, wow_km_change) were NaN for 100% of injury rows vs
+  4-19% of healthy rows; one missing-indicator flag carried 93% of XGBoost's gain
+  and drove validation AUC to 0.987. **Chronic load and ACWR are therefore
+  unbuildable without artifact on this dataset, in any framing.** Features rebuilt
+  (Austin's decision): each row's own window only - prospective = days t-1..t-6
+  (6 days, symmetric for every row), same-day = t..t-6 (7 days, paper framing).
+  The v1 entries below are kept as a record; git history preserves v1 in full.
+
+## Feature-engineering decisions (02_features v1 - superseded, see artifact note above)
 
 - **Daily series reconstructed from overlapping windows, validated twice.** The
   day-approach table's 7-day windows overlap, so the per-athlete daily series is
@@ -67,7 +81,35 @@ assumed, why, and what breaks if it's wrong.
 
 ## Modeling assumptions
 
-- (add as made)
+- **Prospective framing leads (decided by Austin before 03).** Headline models use
+  only `__pros` features (windows end the day before the prediction day) - the only
+  information a deployed triage tool would have. The same-day framing is run once,
+  clearly labeled, solely for comparison against the paper's benchmark.
+- **Missing gated features: median-impute + missing-indicator flags (decided by
+  Austin before 03).** Imputer fit on training data only, inside the pipeline. The
+  indicator flags are kept as features deliberately: "this athlete's window failed
+  the coverage gate" usually means a recent unlogged gap (layoff/off-season), which
+  is plausibly informative about risk. Trade-off owned: imputed values are
+  fabricated medians; the alternative (dropping ~20% of rows) would systematically
+  remove post-gap rows - likely the riskiest moments. *Post-artifact note: with v2
+  features only the value-based pct features carry NaN (zero-running windows,
+  symmetric: 3.4% of positives vs ~10% of negatives), so this decision now has far
+  smaller surface.*
+- **Shared preprocessing for both model families (03).** XGBoost's native NaN
+  handling is deliberately not used; both families get the same imputed matrix so
+  the comparison isolates the model, not the plumbing.
+- **Small grids on purpose (03).** ~300 train positives; a large hyperparameter
+  search would mostly fit validation noise. Logistic C in {0.01, 0.1, 1}; XGBoost
+  depth {2,3,4} x lr {0.05, 0.1}.
+- **Pre-registered selection rule (03, stated before results):** winner = highest
+  validation AP; ties within 0.005 go to the simpler model. Outcome: logistic
+  C=0.01 won BOTH splits (time-aware val AP 0.021 vs chance 0.016, AUC 0.60;
+  grouped mean AP 0.029 vs chance 0.014). XGBoost lost everywhere - complexity did
+  not earn its keep on 6-day windows.
+- **Honest signal statement:** with leak-free prospective features the signal is
+  modest (~1.4x chance AP). This is consistent with the sports-science reality that
+  short-window injury prediction is hard; the inflated numbers common in this
+  space tend to involve exactly the leaks this project caught and removed.
 
 ## Known limitations (stated up front)
 
