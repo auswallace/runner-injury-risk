@@ -42,9 +42,11 @@ What it found (each proven in the notebook, not assumed):
   scores are still filled in). The true "unlogged" periods are gaps BETWEEN rows -
   usually 1-day steps, occasionally weeks to months.
 - Window ordering: each row is a 7-day sliding window. Slot `.6` is the most recent
-  day (the injury day on positive rows); the unsuffixed block is the oldest (t-6).
-  Proven by 2,502,000 slide comparisons with zero mismatches - NOT by eyeballing
-  averages (the eyeball version got it backwards; see section 4).
+  slot; the unsuffixed block is the oldest. Proven by 2,502,000 slide comparisons
+  with zero mismatches - NOT by eyeballing averages (the eyeball version got it
+  backwards; see section 4). ALIGNMENT (corrected later against the paper): all 7
+  slots are days BEFORE the event - the target is whether the athlete's NEXT
+  session brings injury, so `.6` is the day before the injury, not the injury day.
 
 Done means: every finding has a proof cell in the notebook and a line in
 `docs/assumptions_limitations.md`.
@@ -61,9 +63,10 @@ across all overlapping copies (49,162 daily records from 299,362 slot records),
 and the rebuilt rolling `km_7d` reproduces every source row's own 7-slot sum to
 1e-13.
 
-Output (v2, after the leak discovery - see the 03 post-mortem): 12 features x 2
-framings in `data/processed/features_day.csv.gz` (gitignored - athlete-day tables
-could reconstruct an individual's log, which `data/README.md` forbids committing):
+Output (v3, after the leak discovery AND the window-alignment correction - see the
+03 post-mortems): 12 features x 2 windows x raw/normalized in
+`data/processed/features_day.csv.gz` (gitignored - athlete-day tables could
+reconstruct an individual's log, which `data/README.md` forbids committing):
 
 - load: `km_sum`, `sessions`, `km_mod`, `km_hi`
 - intensity mix: `pct_mod`, `pct_hi` (NaN on zero-running windows - value-based,
@@ -72,9 +75,14 @@ could reconstruct an individual's log, which `data/README.md` forbids committing
 - other load: `strength_n`, `alt_hours`
 - subjective: `exertion_avg`, `success_avg`
 
-Two framings per feature, computed from each row's OWN window only: `__same`
-(days t..t-6, the paper's framing, includes the injury day) and `__pros`
-(days t-1..t-6 - 6 days, identical for every row, nothing from the prediction day).
+Two windows per feature, computed from each row's OWN slots only: `__w7` (all 7
+slots - paper-identical, and entirely pre-event since `.6` is the day before the
+injury) and `__w6` (drops `.6` - a 2-day-lead sensitivity check, NOT a leakage
+fix). Plus `__z` variants: each feature z-normalized against that athlete's
+strictly EARLIER healthy rows only (expanding, shifted, >= 20 prior rows required)
+- the paper's key trick minus its transductive shortcut (they normalize with
+healthy events from the row's own future). NaN symmetry audit is a standing gate
+on every feature family (worst gap 0.075 vs 0.81-0.96 on v1's poisoned set).
 
 DEAD, and you must be able to say why cold: `km_28d`, `acwr`, `rest_days_14d`,
 `wow_km_change`. The publishers removed all rows for >= 22 days before every
@@ -86,51 +94,84 @@ complete-case would have deleted all 583 positives).
 Done means: reconstruction proven exact, the buffer artifact demonstrated, both
 framings emitted symmetric, the chronic-load failure documented loudly.
 
-### 03_model - modeling (DONE, twice - v1 died of leakage)
+### 03_model - modeling (DONE, three times - v1 died of leakage, v2 of misalignment)
 
 Question it answers: how much signal is there, and does model complexity earn its
 keep?
 
 The arc you must own: v1 (with chronic-load features) posted validation AUC 0.987 /
 AP 0.49 - our own checklist said "suspect leakage above 0.9," and the hunt found
-the publisher's >= 22-day pre-injury row buffer. Features rebuilt, notebook rerun.
+the publisher's >= 22-day pre-injury row buffer. v2 then over-corrected: it dropped
+slot `.6` assuming it was the injury day; reading the paper showed all 7 slots are
+pre-event, so v2 was discarding real signal. v3 is the final version.
 
-v2 results (leak-free, prospective 6-day features):
+v3 results (leak-free, paper-aligned `w7 raw+z` features):
 
 - Splits: time-aware with 7-day purge gaps (train 25,652 rows / 300 pos;
   val 8,481 / 132; test locked 8,462 / 149) and athlete-grouped (56 dev / 18 test
   athletes, injury-sorted every-4th assignment, GroupKFold(4) selection)
+- Per-athlete normalization is THE ingredient: grouped CV AP 0.029 (raw) -> 0.064
+  (raw+z), AUC 0.658 -> 0.690. Roughly doubles average precision, exactly as the
+  paper's design implies
 - **Logistic C=0.01 won BOTH splits** under the pre-registered rule (max val AP,
-  ties to simpler): time-aware val AP 0.021 (chance 0.016), AUC 0.60; grouped mean
-  AP 0.029 (chance 0.014). XGBoost lost everywhere - complexity did not earn its
-  keep on 6-day windows
-- Imbalance comparison: class weights ~= unweighted ~= undersampling on AP
-  (ranking metrics barely move; weighting matters for calibration later)
-- The honest headline: prospective signal is MODEST, ~1.4x chance AP. Say that
+  ties within 0.005 to simpler): grouped CV AP 0.064 (chance 0.014, 4.5x), AUC
+  0.690 vs the paper's 0.724; time-aware val AP 0.032 (chance 0.016), AUC 0.634.
+  XGBoost lost every comparison - complexity did not earn its keep
+- Imbalance comparison: class weights beat unweighted and 10:1 undersampling on
+  AP, but modestly - the real reason to weight is calibration behavior, tested in 04
+- The honest headline: signal is real but MODEST, ~4.5x chance AP. Say that
   plainly and then explain why the 0.987 number was worthless - that contrast IS
   the portfolio
 
 Done means (met): a baseline nobody can accuse of leakage, a complexity verdict,
 winners + rule saved to `data/processed/model_selection.json`, assumptions logged.
 
-### 04_evaluation - implement docs/evaluation_design.md exactly (PENDING)
+### 04_evaluation - implement docs/evaluation_design.md exactly (DONE)
 
 Question it answers: would this have worked, for whom, and can the score be
 trusted at face value?
 
-Deliverables: both splits reported separately, PR/AP headline + ROC AUC for the
-paper comparison, calibration curve + Brier, the alert-budget table, subgroup
-checks (tenure, volume tier, per-athlete spread). Before running it: look up the
-paper's actual reported AUC numbers - the brief forbids guessing them.
+The one-shot discipline you must be able to narrate: the locked test sets were
+touched by exactly one model per split, once. Four open decisions were settled
+BEFORE any test contact, with validation-side evidence (all logged in
+`docs/assumptions_limitations.md` under "Evaluation decisions"):
 
-Done means: every item in evaluation_design.md has a cell, including the ones
-that make the model look worse.
+1. Time-aware final model fit on TRAIN ONLY; validation spent exactly once, on the
+   calibrator. Grouped: fit on all 56 dev athletes; calibrator on cross-fitted
+   out-of-fold predictions (same GroupKFold(4) as selection).
+2. Platt over isotonic, both splits (cross-fitted val Brier was a near-tie:
+   TA 0.01527 vs 0.01532, GR 0.01391 vs 0.01379; Platt has 2 params at 132
+   calibration positives, and the paper itself Platt-calibrates).
+3. Alert budgets 1/2/3/5/10 flags/week, thresholds FROZEN on validation.
+4. Median subgroup splits, dev-side cutoffs, evaluated on the grouped test.
 
-### 5th piece - decision-support layer (PENDING, your differentiator)
+Results (final - never revisited):
 
-Weekly flagged-athletes view: who is flagged, top contributing features per flag,
-confidence, and a "when not to trust this" panel fed by the calibration and
-subgroup results. Self-contained HTML/Plotly or Tableau Public.
+- **Test AP 0.030 on both splits** (1.7x chance time-aware, 2.6x grouped); AUC
+  0.629 / 0.619 vs the paper's 0.724 and our grouped CV 0.690
+- The grouped CV -> test AUC drop (0.690 -> 0.619) is per-athlete heterogeneity:
+  per-athlete AUC 0.27-0.83, 2 of 15 evaluable held-out athletes below 0.5
+- Platt repairs gross miscalibration (Brier 0.245 -> 0.0173 TA) but ties the
+  base-rate reference (0.0173) - the score is a ranking, not a sharp probability
+- Alert budget: 2.9-4.3% precision at 1-5 flags/week, recall 2-18%; frozen
+  thresholds under-flagged the grouped test (lower-prevalence pool)
+- Subgroups: better for short-tenure / low-volume athletes (AUC 0.66-0.67 vs
+  0.60-0.62); w6 lead-time check: two days of warning is ~free (GR AP 0.032 vs 0.030)
+
+Done means (met): every item in evaluation_design.md has a cell, including the
+ones that make the model look worse. "When NOT to trust the score" filled in.
+
+### 5th piece - decision-support layer (DONE, your differentiator)
+
+`dashboard/build_dashboard.py` -> self-contained 94 KB HTML (gitignored; embeds
+athlete-day rows). Weekly triage replay of the time-aware test period: alert-budget
+selector using the frozen thresholds, flagged athletes with top-3 logistic
+contributions per flag ("vs own history" features dominate - corroborates 03's
+normalization finding), risk bands (High/Elevated/Watch) never percentages,
+retrospective outcome tags, and the "when not to trust this" panel on the page.
+The builder refits the exact 04 winner and asserts it reproduces the saved test
+AP/AUC before writing anything - the dashboard cannot drift from the evaluated
+model. Your calls: HTML over Tableau, TA test period as the demo story.
 
 ---
 
@@ -158,8 +199,12 @@ subgroup results. Self-contained HTML/Plotly or Tableau Public.
   2. Athlete identity: heterogeneity is huge (11 athletes have zero injuries), so
      a model can score by memorizing WHO instead of learning WHAT precedes injury.
   3. Time: training on 2018 to predict 2015 answers no operational question.
-  4. Same-day slice: slot `.6` is the injury day's own training. A "prediction"
-     using it is partly describing the event, not forecasting it.
+  4. Same-day slice - RESOLVED, know the history: we first assumed slot `.6` was
+     the injury day's own training and dropped it as a precaution. The paper says
+     otherwise: the window is the 7 days BEFORE the event and the target is the
+     NEXT session, so `.6` is the day before the injury - legitimate. The
+     surviving version of this concern is lead time (w6 = flag 2 days ahead), a
+     usefulness question, not a leakage one.
 - WHY HERE: every one of these is present simultaneously, which is why the split
   design (3.3) and the two framings (02) exist.
 - NAIVE FAILURE: random row split + same-day features gives a spectacular AUC that
@@ -221,6 +266,10 @@ subgroup results. Self-contained HTML/Plotly or Tableau Public.
 - NAIVE FAILURE: ship `predict_proba` from a class-weighted model. It might say
   "40% risk" for athletes whose true risk is 4%. First week of use, a coach
   notices the numbers are fantasy and the tool is dead.
+- OUTCOME (04): exactly as predicted - raw Brier 0.245/0.262 vs the ~0.015
+  base-rate reference. Platt repaired it (0.0173/0.0116) but only to a statistical
+  TIE with always-predicting-the-base-rate. Calibrated is not the same as sharp:
+  the score's value is ranking, so the dashboard shows bands, never percentages.
 
 ### 3.7 Alert-budget view
 
@@ -278,11 +327,78 @@ subgroup results. Self-contained HTML/Plotly or Tableau Public.
   CAN support. That sequence is a direct answer to the JD's "assess limitations,
   assumptions, and potential bias."
 
+### 3.10 Per-athlete normalization, leak-free (`__z` features)
+
+- WHAT: every feature also ships z-normalized against that athlete's own history -
+  mean and SD computed from that athlete's strictly EARLIER healthy rows only
+  (expanding window, shifted one row, >= 20 prior rows required, else NaN).
+- WHY HERE: 40 km is an easy week for one runner and a career peak for another;
+  absolute load cannot mean the same thing across 43-row and 1,791-row athletes.
+  The paper normalizes per athlete too, but over ALL of that athlete's healthy
+  events - including events after the row being normalized, which is mildly
+  transductive (a row is scored using its own future). We deviated deliberately
+  and documented it. Evidence it is THE ingredient: grouped CV AP 0.029 -> 0.064.
+  The dashboard corroborates it independently: nearly every top signal behind a
+  flag is a "vs own history" feature.
+- NAIVE FAILURE: normalize with each athlete's full-history statistics. Every
+  row then knows the athlete's future average - subtle target-adjacent leakage
+  that inflates validation and quietly breaks at deployment, where the future
+  does not exist yet.
+
+### 3.11 Calibration strategy in 04 - who gets fit on what, exactly once
+
+- WHAT: time-aware final model fit on TRAIN only; validation used exactly once,
+  to fit a Platt calibrator on that model's val predictions. Grouped: model fit
+  on all dev athletes; calibrator fit on cross-fitted out-of-fold predictions.
+  Platt chosen over isotonic on cross-fitted validation Brier (near-tie; 2
+  parameters at 132 calibration positives; paper parity - they Platt-calibrate).
+- WHY HERE: a calibrator learns the map from one model's score distribution to
+  observed frequencies. Refit the model on train+val and the calibrator you fit
+  on the train-only model's val scores maps a distribution that no longer exists.
+  The isotonic comparison had to be cross-fitted (fit on one chunk, scored on
+  another) because in-sample isotonic always wins by memorizing the calibration
+  set. And calibration data must never be test data - that is tuning on test.
+- NAIVE FAILURE: fit isotonic on validation, evaluate it on validation, conclude
+  isotonic wins; or refit on train+val for "more data" and carry the stale
+  calibrator; or calibrate on test because "it is just a monotone map." Each one
+  is a small, respectable-looking way to cheat.
+
+### 3.12 Frozen thresholds and population drift
+
+- WHAT: the alert-budget thresholds were set so VALIDATION averages k flags/week,
+  then applied unchanged to test. On the time-aware test they roughly held (2.2
+  achieved at the 3/week budget); on the grouped test they under-flagged badly
+  (0.35 achieved at the 1/week budget).
+- WHY HERE: freezing thresholds is the deployment-honest choice - a top-k-on-test
+  curve assumes a threshold you could not have known in advance. The grouped
+  under-flagging is itself a finding, not a bug: the held-out athletes are a
+  lower-prevalence pool, so their score distribution sits lower. Budgets
+  calibrated on one population do not transfer to another.
+- NAIVE FAILURE: rank the test set and take the top k per week, then report that
+  as operational performance. It looks like the same table and quietly assumes
+  perfect foresight of the score distribution.
+
+### 3.13 Reading the grouped CV -> test gap (0.690 -> 0.619)
+
+- WHAT: grouped CV estimated AUC 0.690; the one-shot grouped test returned 0.619.
+  Per-athlete AUC on the 18 test athletes spans 0.27-0.83; 2 of 15 evaluable sit
+  below 0.5 (athlete 4: AUC 0.27 across 7 injuries).
+- WHY HERE: with 18 athletes and CV AP fold-SD of 0.021, a draw this size moves
+  the aggregate a lot - and the per-athlete-spread check (evaluation_design.md
+  check (c)) exists precisely because a 74-athlete average can hide athletes the
+  model actively misranks. The order of explanations to check: small-n fold
+  noise, athlete heterogeneity, then genuine overfitting - the first two fully
+  account for this gap (selection used one pre-registered rule on a tiny grid;
+  there was little room to overfit).
+- NAIVE FAILURE: either panic-patch the model after seeing the test number
+  (test-set tuning - the number is now dead) or report only the aggregate and
+  let the average hide the 0.27-AUC athlete a real program would be misled on.
+
 ---
 
 ## 4. How to evaluate my AI assistant
 
-Two real errors it made in THIS repo - both caught by verification, not by trust:
+Three real corrections in THIS repo - all caught by verification, not by trust:
 
 - Window-ordering reversal: 01_eda originally claimed the unsuffixed block was the
   most recent day, inferred from a univariate average. Backwards. The structural
@@ -293,6 +409,13 @@ Two real errors it made in THIS repo - both caught by verification, not by trust
   16.4 km). The anchor check failed by exactly 16.4 km and exposed it. Lesson:
   build checks that reconcile derived data against the source, then trust the
   check, not the narrative.
+- Window misalignment (a joint assumption, killed by the source paper): v2
+  dropped slot `.6` as "the injury day" - a leakage precaution built on our own
+  unverified reading of the window. The paper's Methods say the window is the 7
+  days BEFORE the event and the target is the NEXT session, so `.6` was
+  legitimate signal being thrown away. Lesson: structural checks prove what the
+  data IS; only the source documentation says what it MEANS. Read the paper
+  before designing around an interpretation.
 
 ### Leakage red flags - reject or interrogate on sight
 
@@ -333,10 +456,12 @@ Two real errors it made in THIS repo - both caught by verification, not by trust
 
 ---
 
-## 5. Self-test - 15 questions, hardest last
+## 5. Self-test - 22 questions, hardest last
 
 Attempt each cold before opening the answers. Anything you miss is your next
-study block.
+study block. Q1-Q15 cover 01-03; Q16-Q22 were added after 04 and the dashboard
+shipped - they are the questions an interviewer will reach for first, because
+they probe the newest and most decision-heavy work.
 
 1. What does one row of the day-approach table represent, and what exactly is the
    label saying?
@@ -376,14 +501,37 @@ study block.
     them, and what would each mean for deploying this on a NEW population -
     which is the deployment that actually matters for the role this project
     targets?
+16. Why Platt scaling over isotonic regression, and what made the comparison
+    honest - what would have been wrong with fitting both on validation and
+    picking the lower validation Brier directly?
+17. The final time-aware model was fit on train only, with validation spent
+    exactly once on the calibrator. Defend that against "refit on train+val -
+    you are wasting 132 positives."
+18. After Platt calibration, the test Brier score ties the always-predict-the-
+    base-rate reference on both splits. Does that mean the calibration failed,
+    or the model is useless? What is the correct one-sentence reading, and what
+    did it force in the dashboard?
+19. Grouped CV said AUC 0.690; the one-shot grouped test said 0.619. An
+    interviewer says "your model overfits." Walk through the evidence for the
+    real explanation and the checks that rule overfitting in or out.
+20. The alert thresholds were frozen on validation. On the grouped test the
+    1-flag/week budget produced only 0.35 flags/week. Why did that happen, why
+    is it a finding rather than a bug, and what is the deployment lesson?
+21. What does the w6 lead-time check answer that the w7 headline cannot, what
+    did it find, and why is that finding operationally valuable?
+22. Your dashboard shows "risk bands" and never a probability, and its builder
+    script refuses to write the HTML unless a refit reproduces the saved test
+    metrics. Justify both choices to a program manager in plain language.
 
 <details>
 <summary>Answers - open only after attempting all 15</summary>
 
-1. One row = one athlete on one calendar day (`Date` t), carrying a 7-day window
-   of 10 training metrics: slot `.6` = day t (most recent), unsuffixed = day t-6.
-   The label `injury` says whether THIS athlete got injured on day t. It is a
-   day-level event label, not "injured sometime soon."
+1. One row = one athlete-day carrying a 7-day window of 10 training metrics, ALL
+   of them before the event: slot `.6` = the most recent pre-event day, unsuffixed
+   = the oldest. The label says whether the athlete's NEXT training session brings
+   injury - so `.6` is the day before the injury, not the injury day. (An earlier
+   version of this answer said `.6` was the injury day itself; the paper's Methods
+   corrected that - correction 3 in section 4.)
 
 2. Predicting "never injured" is right on 42,183 of 42,766 rows = 98.6% accuracy
    with zero recall. Accuracy rewards the majority class; every metric here must
@@ -462,18 +610,20 @@ study block.
     load averages. Proof of the reverse: for consecutive-date rows,
     row(t) slot k equals row(t-1) slot k+1 - a day's value slides from `.6`
     toward unsuffixed as it ages - 2,502,000 comparisons, zero mismatches. So
-    `.6` is the injury day. Corrected reading: the load elevation (~8.05 vs
-    ~7.02 km baseline) sits at t-6, ~6 days BEFORE injury, and the injury day
-    itself is near baseline - a spike-then-break shape, noted as a look, not a
-    result.
+    `.6` is the newest SLOT. What the newest slot MEANS took a second correction:
+    the paper's window is the 7 days before the event, so `.6` is the day before
+    the injury (not the injury day, as first believed). Two-layer lesson:
+    structure proved the ordering; only the source paper gave the alignment.
 
-13. `.6` is the injury day's own training - using it means "predicting" an event
-    partly from the event's own day (a runner mid-injury logs differently), so
-    the prospective framing shifts every window to end at t-1. Keep same-day
-    anyway because the paper's benchmark is same-day - comparability requires
-    it. Lead with prospective (it is the only framing a deployed triage tool
-    could ever have) and label the same-day comparison honestly. Final call is
-    yours - this is the flagged open decision for 03.
+13. SUPERSEDED QUESTION - answer with the corrected state: there is no same-day
+    leak in the shipped features, because the paper's window is entirely
+    pre-event ("the day before the event is day 0"), so the full 7-slot `__w7`
+    window is both paper-identical AND prospective. The residual question `.6`
+    poses is lead time, not leakage: a flag using `.6` arrives one day before
+    injury; `__w6` (dropping `.6`) tests two days of warning, and 04 found it
+    costs almost nothing (grouped AP 0.032 vs 0.030). The v2 version of this
+    repo dropped `.6` on the wrong belief it was the injury day - that
+    over-caution was itself an error that cost signal (correction 3).
 
 14. "The data cannot support it: the released tables carry only masked athlete
     IDs; 27 W / 47 M exists only as a cohort description in the paper, never
@@ -502,5 +652,78 @@ study block.
     cohort over time; cold-start performance on strangers is X." For an
     H2F-shaped program onboarding new soldiers constantly, the grouped number
     is the one to put in front of the decision-maker.
+
+16. Platt fits two parameters (a scaled-and-shifted sigmoid on the log-odds);
+    isotonic fits an arbitrary monotone step function. With only 132 positives
+    in the time-aware calibration set, isotonic has enough freedom to memorize
+    noise. The honest comparison was CROSS-FITTED: calibrator fit on one chunk
+    of validation-side predictions, Brier measured on another (cross-half on
+    the time-aware val, cross-fold on the grouped OOF preds) - because isotonic
+    evaluated in-sample on its own calibration data always wins by memorization.
+    Result was a near-tie (TA 0.01527 Platt vs 0.01532; GR 0.01391 vs 0.01379),
+    so the tie went to fewer parameters - and to parity with the paper, which
+    also Platt-calibrates. One less methodological difference to explain.
+
+17. A calibrator is a map from ONE model's score distribution to observed
+    frequencies. Refit the model on train+val and its scores shift; the
+    calibrator fit on the train-only model's val predictions now maps a
+    distribution that no longer exists. The alternatives were: carry the stale
+    calibrator (mismatch you cannot quantify without test contact), or
+    cross-fit calibration inside train+val (more moving parts, harder to
+    defend). Fitting on train and spending validation exactly once - on the
+    calibrator - is the version where every dataset has one job and the story
+    survives hostile questioning. The 132 positives were not wasted; they
+    bought the thing class-weighted training cannot provide: probabilities.
+
+18. Neither failed nor useless - it means the score is well-ORDERED but not
+    SHARP. Calibration repaired a catastrophic distortion (raw Brier 0.245 ->
+    0.0173; raw scores from class-weighted training sat near 0.5 against a
+    1.4% base rate). But at AUC ~0.63 on a 1.4%-prevalence problem, the
+    calibrated scores hug the base rate, so their squared error cannot beat
+    the constant predictor - Brier is dominated by sharpness it does not have.
+    One-sentence reading: "the model tells you WHO to look at first, not how
+    likely the injury is." Dashboard consequence: risk bands (High/Elevated/
+    Watch from the frozen threshold tiers), never a percentage on screen.
+
+19. Overfitting-to-selection is nearly ruled out by construction: one
+    pre-registered rule (max val AP, ties to simpler), a deliberately tiny
+    grid, and the winner was the SIMPLEST model in it (logistic C=0.01) -
+    there was no iterative test peeking to overfit with. The evidence for the
+    real explanation: grouped CV AP fold-SD was 0.021 (huge relative to the
+    metric), the test draw is 18 athletes, and per-athlete AUC on those
+    athletes spans 0.27-0.83 with 2 of 15 below 0.5 - the aggregate moved
+    because the athletes differ, which is exactly what evaluation_design.md's
+    per-athlete-spread check was pre-registered to catch. Checks: per-fold/
+    per-athlete metrics (done - heterogeneity confirmed), and the time-aware
+    split's val -> test stability (0.634 -> 0.629, barely moved - a model
+    that "overfits" does not hold steady on the harder prospective axis).
+
+20. The thresholds encode a score distribution. The 18 held-out athletes are a
+    lower-prevalence pool (1.17% vs 1.43% dev), score lower overall, and so
+    cross the frozen bar less often. It is a finding because the run was
+    designed to expose exactly this: freezing thresholds is what a real
+    deployment does, and the under-flagging measures what transplanting a
+    budget across populations costs. Lesson: alert budgets are per-population
+    settings - re-anchor thresholds on each new cohort (and expect drift over
+    time within one).
+
+21. w7's flag arrives one day before the injury - operationally almost too
+    late for an intervention. w6 asks: what survives if staff get two days?
+    Answer: essentially everything (grouped AP 0.0318 vs 0.0301, AUC -0.007;
+    time-aware AP 0.0291 vs 0.0301). The value: the tool can honestly promise
+    a two-day lead at no measurable cost, which changes what staff can DO with
+    a flag (adjust the next two sessions vs cancel tomorrow). It also says the
+    signal is not concentrated in the eve-of-injury day - consistent with a
+    building-pattern story rather than a day-before anomaly.
+
+22. Bands: "The score is good at ranking who to check first, but the absolute
+    percentages it could print would be no more informative than the team's
+    base rate - so we print the rank tier and refuse to print a number that
+    would look precise and be meaningless." Builder assert: "The dashboard is
+    generated from a model refit by script. If someone touches the features,
+    the data, or the code, the refit no longer matches the evaluation we
+    published, and the script refuses to build rather than silently showing
+    you numbers from a model nobody evaluated. It is the same reason a lab
+    revalidates an instrument after recalibration."
 
 </details>

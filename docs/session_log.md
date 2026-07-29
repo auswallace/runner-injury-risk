@@ -56,11 +56,24 @@ test AP/AUC before writing anything. Generated HTML is gitignored (embeds
 athlete-day rows; data/README.md rule); screenshots committed in docs/img/ and
 embedded in the README. Verified in browser, light and dark.
 
+### Wrap-up (same session)
+
+Pushed through the dashboard commit - the public repo now shows the full arc.
+FIELD_GUIDE refreshed for the re-quiz: the stale pre-correction claims were fixed
+(it still said `.6` = injury day and carried v2's 6-day numbers), 04 and the
+dashboard sections written with final numbers, four new locked-decision entries
+(3.10 leak-free normalization, 3.11 calibration strategy, 3.12 frozen thresholds
+and drift, 3.13 reading the CV->test gap), the window-alignment correction added
+as the third entry in "how to evaluate my AI assistant," and self-test extended
+to 22 questions - Q16-Q22 target the 04/dashboard decisions an interviewer will
+reach for first. Austin's re-quiz (Q1-Q4 were misses last time) is still his to do.
+
 ### Next session starts here
 
 Resume wiring: Projects section + GitHub link, coordinated via the wiki
 (`wiki/resume/JD - LMI - AI ML Engineer.md`, Application Status section). The
-project is interview-ready as it stands; remaining polish is optional.
+project is interview-ready as it stands; remaining polish is optional. Austin's
+own prep: re-take the field-guide self-test, now 22 questions.
 
 ## Session 2 (2026-07-28 / 29): 01 -> 03, three corrections
 
