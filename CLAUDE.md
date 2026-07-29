@@ -140,12 +140,16 @@ markdown explains WHY, not just what. Honest about what didn't work - the README
       logged in assumptions_limitations.md; results in
       data/processed/evaluation_results.json; blind spots filled into "When NOT to
       trust the score"
-- [ ] **Dashboard layer - NEXT** (decision-support view - Austin's differentiator,
-      do not skip). Reads evaluation_results.json + per-row scores; must carry the
-      calibration caveat (bands not percentages) and per-athlete-spread caveat on
-      its face
-- [ ] Then: Projects section + GitHub link on the resume (coordinate via the wiki,
-      see `wiki/resume/JD — LMI — AI ML Engineer.md` Application Status section)
+- [x] Dashboard layer done: `dashboard/build_dashboard.py` generates a
+      self-contained 94 KB HTML (gitignored - embeds athlete-day rows; screenshots
+      in docs/img/, embedded in README). Weekly triage view over the time-aware
+      test period: budget selector with frozen thresholds, top-3 signals per flag,
+      risk bands not percentages, "when not to trust this" panel, retrospective
+      outcome tags. Builder asserts it reproduces 04's saved test metrics before
+      writing. Austin's choices: HTML over Tableau, TA test period as demo data
+- [ ] **NEXT: Projects section + GitHub link on the resume** (coordinate via the
+      wiki, see `wiki/resume/JD — LMI — AI ML Engineer.md` Application Status
+      section)
 
 Meta-reminder for Austin, not the code: the LMI application ships BEFORE this
 project is finished. Half-done with a good README is already interview material.

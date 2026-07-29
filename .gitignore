@@ -1,5 +1,6 @@
 data/raw/
 data/processed/
+dashboard/index.html
 __pycache__/
 .ipynb_checkpoints/
 .venv/

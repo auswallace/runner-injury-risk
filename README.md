@@ -29,20 +29,24 @@ to git). See `data/README.md` for provenance and citation details.
 ```
 data/            fetch script + provenance notes (raw data gitignored)
 notebooks/       01 EDA -> 02 features -> 03 model -> 04 evaluation
-docs/            evaluation design, assumptions & limitations
+dashboard/       decision-support view builder (generated HTML gitignored)
+docs/            evaluation design, assumptions & limitations, session log
 ```
 
-## Method (planned)
+## Method
 
-- Features: acute (7-day) vs chronic (28-day) training load and their ratio, session
-  intensity distribution, recovery patterns
-- Models: regularized logistic regression baseline, then tree ensembles (the source
-  paper used bagged XGBoost - its reported AUC is the benchmark)
+- Features: 12 seven-day training-load aggregates (distance, intensity mix, rest,
+  strength work, perceived exertion/recovery), each in raw form and normalized
+  against the athlete's own strictly earlier healthy history. The originally planned
+  chronic-load/ACWR features died on a dataset artifact - see Status below
+- Models: regularized logistic regression baseline, then XGBoost (the source paper
+  used bagged XGBoost - its reported AUC is the benchmark). Logistic won
 - Evaluation: time-aware splits (train early years, test later) and athlete-grouped
   splits to prevent leakage; precision-recall alongside ROC (rare events make ROC
-  flattering); calibration curves; subgroup checks
-- Output: weekly flagged-athletes view with top contributing features and an explicit
-  "when not to trust this score" panel
+  flattering); Platt-calibrated probabilities with Brier scores; alert-budget table;
+  subgroup checks. Pre-registered in `docs/evaluation_design.md` before modeling
+- Output: weekly flagged-athletes view with top contributing signals per flag and an
+  explicit "when not to trust this" panel
 
 ## Status
 
@@ -74,5 +78,42 @@ docs/            evaluation design, assumptions & limitations
   operating point (58.4% sensitivity, 74.1% specificity) implies roughly 3%
   precision - about 32 false alarms per true flag. Making that visible, via
   precision-recall, calibration and an alert-budget view, is what 04 adds
-- 04_evaluation next: full pre-registered battery on the locked test sets
-- Findings and every assumption logged in `docs/assumptions_limitations.md`
+- 04_evaluation done - the locked test sets were touched exactly once, with every
+  decision (calibration method, thresholds, subgroup cutoffs) locked beforehand:
+  - **Test AP 0.030 on both splits** (1.7x chance time-aware, 2.6x athlete-grouped);
+    AUC 0.629 / 0.619 against the paper's 0.724
+  - The grouped CV-to-test AUC drop (0.690 to 0.619) is athlete heterogeneity, not
+    a bug: per-athlete AUC spans 0.27-0.83 and 2 of 15 evaluable held-out athletes
+    sit below 0.5. The average hides athletes the model actively misranks
+  - Platt calibration repairs the gross miscalibration of class-weighted training
+    (Brier 0.245 to 0.017) but lands statistically tied with predicting the base
+    rate. The score is a useful ranking, not a sharp probability - so the dashboard
+    shows risk bands, never percentages
+  - Alert budget: 2.9-4.3% precision at 1-5 flags/week, recall 2-18%. The paper's
+    implied ~3% precision, made explicit instead of left implied
+  - Two days of warning costs almost nothing (6-slot window: grouped AP 0.032 vs
+    0.030) - the operationally friendlier lead time is essentially free
+- Decision-support dashboard done (see below)
+- Findings and every assumption logged in `docs/assumptions_limitations.md`,
+  including the filled-in "when NOT to trust the score" section
+
+## Decision-support view
+
+A self-contained HTML dashboard (no dependencies, no server) that replays the
+held-out final period week by week as the triage tool staff would have seen: an
+alert-budget selector, flagged athletes with the top signals behind each flag, risk
+bands instead of probabilities, and the model's blind spots stated on the page.
+
+![Dashboard overview](docs/img/dashboard_overview.png)
+
+![Weekly flagged-athletes view](docs/img/dashboard_week_view.png)
+
+The generated file embeds athlete-day level rows, so it is not committed (see
+`data/README.md`); rebuild it locally with:
+
+```
+python3 dashboard/build_dashboard.py
+```
+
+The builder refits the exact evaluated model and asserts it reproduces 04's saved
+test metrics before writing anything.

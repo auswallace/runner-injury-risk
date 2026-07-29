@@ -40,11 +40,27 @@ contact (recorded in assumptions_limitations.md under "Evaluation decisions"):
 five concrete blind spots above. `data/processed/evaluation_results.json` carries
 every table for the dashboard layer.
 
+### Decision-support dashboard (same session)
+
+Austin picked self-contained HTML over Tableau Public (Tableau depth is already on
+the resume; a single reviewable file shows range) and the time-aware test period as
+the demo data (the prospective "what staff would have seen each week" story).
+Shipped: `dashboard/build_dashboard.py` -> `dashboard/index.html` (94 KB, zero
+dependencies - the one chart is hand-rolled SVG, so no 3.5 MB Plotly vendoring).
+Weekly view with alert-budget selector (1/2/3/5/10 flags/wk, frozen thresholds),
+flagged athletes with top-3 logistic contributions per flag ("vs own history"
+features dominate, consistent with 03), risk bands (High/Elevated/Watch) instead of
+percentages, retrospective outcome tags, and the "when not to trust this" panel on
+the page. The builder refits the exact 04 winner and asserts it reproduces the saved
+test AP/AUC before writing anything. Generated HTML is gitignored (embeds
+athlete-day rows; data/README.md rule); screenshots committed in docs/img/ and
+embedded in the README. Verified in browser, light and dark.
+
 ### Next session starts here
 
-Decision-support dashboard (Austin's differentiator): weekly flagged-athletes view
-reading evaluation_results.json + per-row scores; must carry the calibration caveat
-and per-athlete-spread caveat on its face. Then resume/README wiring per CLAUDE.md.
+Resume wiring: Projects section + GitHub link, coordinated via the wiki
+(`wiki/resume/JD - LMI - AI ML Engineer.md`, Application Status section). The
+project is interview-ready as it stands; remaining polish is optional.
 
 ## Session 2 (2026-07-28 / 29): 01 -> 03, three corrections
 
