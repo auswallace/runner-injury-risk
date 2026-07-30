@@ -148,34 +148,39 @@ assumed, why, and what breaks if it's wrong.
   prediction is genuinely hard; the spectacular numbers common in this space tend to
   come from exactly the leaks this project found and removed.
 
-## Evaluation decisions (04, locked by Austin BEFORE any test-set contact)
+## Evaluation decisions (04, locked before any test-set contact)
 
-- **Final time-aware model is fit on train only; validation is spent exactly once,
-  on the calibrator.** The alternative (refit on train+val for ~40% more positives)
-  was rejected because the calibrator would then map the score distribution of a
-  different model than the one it was fit on. Grouped split: model fit on all 56 dev
-  athletes; calibrator fit on cross-fitted out-of-fold predictions (GroupKFold(4),
-  same folds as selection), the standard cross-fitting construction.
-- **Platt scaling over isotonic, both splits.** Evidence (validation-side, honestly
-  cross-fitted so isotonic could not win by memorizing): time-aware cross-half Brier
-  0.01527 Platt vs 0.01532 isotonic; grouped cross-fold 0.01391 vs 0.01379. A
-  near-tie; Platt chosen for fewer parameters at 132 calibration positives, and for
-  parity with the paper (they also Platt-calibrate). Raw class-weighted
-  probabilities are unusable as probabilities (Brier 0.20-0.26 vs the ~0.015
-  base-rate reference) - recalibration is mandatory, as anticipated in 03.
-- **Alert budgets 1/2/3/5/10 flags per week, thresholds frozen on validation.** The
-  threshold for k flags/week is set so validation averages k flags/week, then
-  applied unchanged to test - the deployment-honest version (a top-k-on-test curve
-  assumes a threshold you could not have known). Reported: achieved flags/week,
-  precision, recall.
-- **Subgroups: median splits (tenure = athlete's logged-row count, volume = athlete
-  mean 7-day km), cutoffs computed on dev athletes only; evaluated on the grouped
-  test split** (that is where the "does it generalize across runners" question
-  lives), plus the per-athlete AUC spread. Terciles rejected: test bins would drop
-  below ~15 positives.
-- **w6 sensitivity check is discrimination-only** (AP/AUC on both test sets): it
-  answers "how much signal survives with 2 days of lead time", not a full
-  deployment battery.
+Four calls I had to make before the one-shot run, each settled on validation
+evidence only. Writing them down here first was the point: once the test sets were
+touched there would be no honest way to revisit them.
+
+- **Final time-aware model is fit on train only; validation gets spent exactly
+  once, on the calibrator.** I considered refitting on train+val for the ~40%
+  extra positives and decided against it: the calibrator would then be mapping the
+  score distribution of a model that no longer exists. Grouped split: model fit on
+  all 56 dev athletes, calibrator fit on cross-fitted out-of-fold predictions
+  (GroupKFold(4), same folds as selection).
+- **Platt scaling over isotonic, both splits.** I compared them cross-fitted (fit
+  on one chunk, scored on another) because isotonic evaluated on its own
+  calibration data always wins by memorizing it. Result: time-aware cross-half
+  Brier 0.01527 Platt vs 0.01532 isotonic; grouped cross-fold 0.01391 vs 0.01379.
+  A near tie, so I took the two-parameter option at 132 calibration positives,
+  which also matches the paper (they Platt-calibrate too). The raw class-weighted
+  probabilities were unusable as probabilities (Brier 0.20-0.26 against a ~0.015
+  base-rate reference), which 03 predicted.
+- **Alert budgets of 1/2/3/5/10 flags per week, thresholds frozen on validation.**
+  Each threshold is set so validation averages k flags per week, then applied to
+  test unchanged, because that is what a deployment would have to do. A
+  top-k-on-test curve assumes a threshold nobody could have known in advance. I
+  report achieved flags/week, precision, and recall.
+- **Subgroups: median splits** (tenure = athlete's logged-row count, volume =
+  athlete mean 7-day km), cutoffs computed on dev athletes only, evaluated on the
+  grouped test split since that is where the "does it generalize across runners"
+  question lives. Plus the per-athlete AUC spread. I looked at terciles and
+  dropped them: test bins would fall below ~15 positives and prove nothing.
+- **The w6 sensitivity check is discrimination-only** (AP/AUC on both test sets).
+  It answers one question, how much signal survives with 2 days of lead time, and
+  is not a full deployment battery.
 
 ## Known limitations (stated up front)
 
@@ -192,20 +197,25 @@ assumed, why, and what breaks if it's wrong.
 
 ## When NOT to trust the score (filled from 04's one-shot test results)
 
+The five ways I found that this score can mislead someone, each one measured, not
+hypothetical:
+
 - **As an absolute probability.** Platt-calibrated Brier ties the base-rate
-  reference on both test sets (0.0173 vs 0.0173 TA; 0.0116 vs 0.0116 GR). The score
-  ranks usefully but is not sharp; present risk as bands, never as "X% chance".
+  reference on both test sets (0.0173 vs 0.0173 TA; 0.0116 vs 0.0116 GR). The
+  score ranks usefully but is not sharp. I present risk as bands and never as
+  "X% chance", because the percentage would look precise and mean nothing.
 - **For high-volume, long-tenure athletes.** Grouped-test AUC drops to 0.60-0.62
-  for the high-volume / high-tenure halves (vs 0.66-0.67 low), and high-tenure AP
-  is barely above chance (0.018 vs 0.011). Bins hold 37-93 positives - direction,
-  not precision.
-- **For individual athletes without history-checking.** Per-athlete AUC on the
-  grouped test spans 0.27-0.83; 2 of 15 evaluable athletes are below 0.5, i.e. the
-  model actively misranks them. A deployed view must show per-athlete track record,
-  not just the score.
-- **With thresholds transplanted across populations.** Frozen validation thresholds
+  for the high-volume and high-tenure halves (vs 0.66-0.67 for the low halves),
+  and high-tenure AP barely clears chance (0.018 vs 0.011). Bins hold 37-93
+  positives, so read direction, not precision.
+- **For individual athletes without checking their track record.** Per-athlete AUC
+  on the grouped test spans 0.27-0.83, and 2 of 15 evaluable athletes come out
+  below 0.5, meaning the model actively misranks them. A deployed view has to
+  show the per-athlete record next to the score.
+- **With thresholds carried across populations.** The frozen validation thresholds
   under-flagged the grouped test (0.35 flags/wk at the 1/wk budget) because the
-  held-out athletes are a lower-prevalence pool. Budgets need re-anchoring per
-  population.
-- **Expecting high recall.** At actionable budgets (1-5 flags/week) recall is
-  2-18%: most injuries arrive unflagged. This is a triage aid, not a safety net.
+  held-out athletes are a lower-prevalence pool. Budgets need re-anchoring on
+  every new population.
+- **Expecting high recall.** At budgets staff could act on (1-5 flags/week),
+  recall is 2-18%. Most injuries arrive unflagged. This is a triage aid, not a
+  safety net, and anyone deploying it should say so out loud.

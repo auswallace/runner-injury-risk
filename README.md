@@ -4,12 +4,12 @@ Predicting injury risk in competitive runners from day-by-day training load, on 
 University of Groningen open dataset (74 elite Dutch runners, 7 years of training logs,
 injury event labels).
 
-**Why this project:** injury-risk surveillance is a rare-event prediction problem with
-real operational stakes: messy longitudinal data, heavy class imbalance, and a score
-that has to be trustworthy enough to drive preventive decisions about people. This
-repo builds that loop end to end: features from training load, a calibrated classifier,
-honest evaluation against a published benchmark, and a decision-support view of the
-output.
+**Why this project:** my background is security data analytics, and injury-risk
+surveillance turns out to be the same shape of problem I work on every day: rare
+events buried in messy longitudinal data, and an alert stream that people stop
+trusting the moment it cries wolf. This repo builds the full loop on public data:
+features from training load, a calibrated classifier, honest evaluation against a
+published benchmark, and a decision-support view of the output.
 
 *Independent project on public data. Not affiliated with any military program,
 government agency, or employer.*
@@ -36,17 +36,22 @@ docs/            evaluation design, assumptions & limitations, session log
 ## Method
 
 - Features: 12 seven-day training-load aggregates (distance, intensity mix, rest,
-  strength work, perceived exertion/recovery), each in raw form and normalized
-  against the athlete's own strictly earlier healthy history. The originally planned
-  chronic-load/ACWR features died on a dataset artifact - see Status below
-- Models: regularized logistic regression baseline, then XGBoost (the source paper
-  used bagged XGBoost - its reported AUC is the benchmark). Logistic won
-- Evaluation: time-aware splits (train early years, test later) and athlete-grouped
-  splits to prevent leakage; precision-recall alongside ROC (rare events make ROC
-  flattering); Platt-calibrated probabilities with Brier scores; alert-budget table;
-  subgroup checks. Pre-registered in `docs/evaluation_design.md` before modeling
-- Output: weekly flagged-athletes view with top contributing signals per flag and an
-  explicit "when not to trust this" panel
+  strength work, perceived exertion and recovery), each kept in raw form and also
+  normalized against that athlete's own earlier healthy days. I planned chronic
+  load and ACWR features too. They died on a dataset artifact, and finding out why
+  taught me more than the features would have - that story is under Status
+- Models: regularized logistic regression first, then XGBoost (the source paper
+  used bagged XGBoost, so its reported AUC is the benchmark). Logistic won every
+  comparison; the fancier model never earned its keep here
+- Evaluation: a time-aware split (train on early years, test on later ones) and an
+  athlete-grouped split (test athletes fully unseen), reported separately.
+  Precision-recall leads because ROC flatters rare events. Calibration gets checked
+  with Brier scores, and there is an alert-budget table because "how many flags per
+  week can my staff handle" is the question a real program would actually ask. I
+  wrote the evaluation design down in `docs/evaluation_design.md` before modeling
+  so I could not quietly bend it later
+- Output: a weekly flagged-athletes view with the top signals behind each flag and
+  a "when not to trust this" panel
 
 ## Status
 
@@ -78,42 +83,58 @@ docs/            evaluation design, assumptions & limitations, session log
   operating point (58.4% sensitivity, 74.1% specificity) implies roughly 3%
   precision - about 32 false alarms per true flag. Making that visible, via
   precision-recall, calibration and an alert-budget view, is what 04 adds
-- 04_evaluation done - the locked test sets were touched exactly once, with every
-  decision (calibration method, thresholds, subgroup cutoffs) locked beforehand:
-  - **Test AP 0.030 on both splits** (1.7x chance time-aware, 2.6x athlete-grouped);
-    AUC 0.629 / 0.619 against the paper's 0.724
-  - The grouped CV-to-test AUC drop (0.690 to 0.619) is athlete heterogeneity, not
-    a bug: per-athlete AUC spans 0.27-0.83 and 2 of 15 evaluable held-out athletes
-    sit below 0.5. The average hides athletes the model actively misranks
-  - Platt calibration repairs the gross miscalibration of class-weighted training
-    (Brier 0.245 to 0.017) but lands statistically tied with predicting the base
-    rate. The score is a useful ranking, not a sharp probability - so the dashboard
-    shows risk bands, never percentages
-  - Alert budget: 2.9-4.3% precision at 1-5 flags/week, recall 2-18%. The paper's
-    implied ~3% precision, made explicit instead of left implied
-  - Two days of warning costs almost nothing (6-slot window: grouped AP 0.032 vs
-    0.030) - the operationally friendlier lead time is essentially free
+- 04_evaluation done. I kept the test sets locked until every decision
+  (calibration method, thresholds, subgroup cutoffs) was settled on validation
+  data, then evaluated once and stopped:
+  - Test AP 0.030 on both splits (1.7x chance on the time-aware split, 2.6x on
+    the athlete-grouped one); AUC 0.629 / 0.619 against the paper's 0.724
+  - Grouped CV had said 0.690, so the drop to 0.619 sent me looking. Per-athlete
+    AUC across the 18 held-out runners goes from 0.27 to 0.83, and 2 of 15 sit
+    below a coin flip. The average was hiding athletes the model gets actively
+    backwards. This is the exact failure the per-athlete check in my evaluation
+    design existed to catch, and it caught it
+  - Calibration was a lesson. Platt scaling fixes the absurd raw probabilities
+    that class-weighted training produces (Brier 0.245 down to 0.017), but the
+    calibrated score still cannot beat just predicting the 1.4% base rate every
+    time. The model earns its keep by ranking, not by putting a believable
+    percentage on anyone. That finding is why the dashboard shows risk bands
+    instead of probabilities
+  - The alert-budget table: at 1 to 5 flags per week, precision is 2.9-4.3% and
+    recall is 2-18%. That sounds rough until you work out that the paper's own
+    published operating point implies about 3% precision too. They never printed
+    that number, and I think it is the most important one in this problem
+  - Flagging two days ahead instead of one costs almost nothing (grouped AP 0.032
+    vs 0.030). Good news, since a one-day warning leaves little time to act
 - Decision-support dashboard done (see below)
 - Findings and every assumption logged in `docs/assumptions_limitations.md`,
   including the filled-in "when NOT to trust the score" section
 
 ## Decision-support view
 
-A self-contained HTML dashboard (no dependencies, no server) that replays the
-held-out final period week by week as the triage tool staff would have seen: an
-alert-budget selector, flagged athletes with the top signals behind each flag, risk
-bands instead of probabilities, and the model's blind spots stated on the page.
+A model number is not a decision, and this was the part of the project I most
+wanted to get right. The dashboard is one HTML file, no server and no
+dependencies, that replays the held-out final period week by week the way staff
+would have lived it: pick how many flags per week your people can act on, see who
+gets flagged and which signals drove each flag, and read the model's blind spots
+on the same page as its output.
 
 ![Dashboard overview](docs/img/dashboard_overview.png)
 
 ![Weekly flagged-athletes view](docs/img/dashboard_week_view.png)
 
-The generated file embeds athlete-day level rows, so it is not committed (see
-`data/README.md`); rebuild it locally with:
+Two choices came straight out of the evaluation. Risk shows as bands, never as a
+percentage, because I now know the calibrated probabilities are no sharper than
+the base rate. And nearly every top signal behind a flag turns out to be a "vs
+own history" feature, which backs up the modeling result: trouble does not look
+like big mileage, it looks like a runner drifting away from their own normal.
+
+The generated file embeds athlete-day rows, so it stays out of git (rule in
+`data/README.md`). Rebuild it locally with:
 
 ```
 python3 dashboard/build_dashboard.py
 ```
 
-The builder refits the exact evaluated model and asserts it reproduces 04's saved
-test metrics before writing anything.
+The builder refits the exact model that was evaluated and refuses to write the
+file if the refit does not reproduce the saved test metrics. I did not want a
+dashboard that could quietly drift away from the numbers I published.

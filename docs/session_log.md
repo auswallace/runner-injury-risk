@@ -56,6 +56,14 @@ test AP/AUC before writing anything. Generated HTML is gitignored (embeds
 athlete-day rows; data/README.md rule); screenshots committed in docs/img/ and
 embedded in the README. Verified in browser, light and dark.
 
+### Voice pass (2026-07-30)
+
+Austin asked for a humanizing pass on the prose: the README, the 04 notebook
+markdown, and the two 04-era sections of assumptions_limitations.md were rewritten
+in his first-person voice (what I decided, what surprised me, what I learned).
+Facts and numbers untouched; the field guide and this log kept their working
+registers on purpose.
+
 ### Wrap-up (same session)
 
 Pushed through the dashboard commit - the public repo now shows the full arc.
